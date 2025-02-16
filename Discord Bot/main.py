@@ -1,4 +1,5 @@
 import discord
+from discord import Webhook
 from discord.ext import commands
 import asyncio
 from flask import Flask, request, jsonify
@@ -10,6 +11,7 @@ from datetime import timedelta
 import sqlite3
 import tracemalloc
 from typing import Optional, Literal
+import requests
 
 tracemalloc.start()
 load_dotenv()
@@ -119,7 +121,24 @@ def time_start():
     webhook_url = data.get('webhookUrl')
 
     if webhook_url:
-        return
+        data = {
+            "username": "Atlas Time Integration",
+            "embeds": [
+            {
+                "title": "Clock-In Alert",
+                "description": "A user has clocked in/out.",
+                "color": 0x00ff00,
+                "fields": [
+                    {"name": "Start", "value": format_discord_timestamp(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')), "inline": True},
+                    {"name": "User", "value": f"<@{discordId}>", "inline": True},
+                    {"name": "Type", "value": type, "inline": False},
+                ],
+                "footer": {"text": "Atlas Time Integration"},
+                "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+            }
+        ]
+        }
+        requests.post(webhook_url, json=data)
     
     now = datetime.datetime.now()
     
@@ -150,9 +169,6 @@ def time_end():
     discordId = data.get('discordId')
     type = data.get('type')
     webhook_url = data.get('webhookUrl')
-
-    if webhook_url:
-        return
     
     conn = sqlite3.connect('time.db')
     c = conn.cursor()
@@ -168,21 +184,44 @@ def time_end():
         formatted_end = now.strftime('%Y-%m-%d %H:%M:%S')
         time_taken = now - row_datetime
         seconds = time_taken.total_seconds()
+        total_time = seconds_converter(seconds)
         c.execute("DELETE FROM clockin WHERE user_id = ? AND type = ?", (discordId, type,))
         c.execute("INSERT INTO logs VALUES (?, ?, ?, ?)", (discordId, type, now, seconds))
         conn.commit()
         conn.close()
-        bot.loop.create_task(end_dm(discordId, type, formatted_start, formatted_end, seconds))
+
+        if webhook_url:
+            data = {
+                "username": "Atlas Time Integration",
+                "embeds": [
+                {
+                    "title": "Clock-Out Alert",
+                    "description": "A user has clocked in/out.",
+                    "color": 0xFF0000,
+                    "fields": [
+                        {"name": "Start", "value": format_discord_timestamp(formatted_start), "inline": True},
+                        {"name": "End", "value": format_discord_timestamp(formatted_end), "inline": True},
+                        {"name": "User", "value": f"<@{discordId}>", "inline": True},
+                        {"name": "Type", "value": type, "inline": True},
+                        {"name": "Total Time", "value": total_time, "inline": True}
+                    ],
+                    "footer": {"text": "Atlas Time Integration"},
+                    "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+                }
+            ]
+            }
+        requests.post(webhook_url, json=data)
+        future = asyncio.run_coroutine_threadsafe(end_dm(discordId, type, formatted_start, formatted_end, total_time), bot.loop)
         return jsonify({"success": "DM logged"}), 200
 
-async def end_dm(discord_id, type, start, end, seconds):
+async def end_dm(discord_id, type, start, end, time):
     await bot.wait_until_ready()
     try:
         user = await bot.fetch_user(int(discord_id))
         embed = discord.Embed(title="Clocked Out", color=discord.Color.red())
         embed.add_field(name="Start", value=format_discord_timestamp(start))
         embed.add_field(name="End", value=format_discord_timestamp(end))
-        embed.add_field(name="Total Time", value=seconds_converter(seconds))
+        embed.add_field(name="Total Time", value=time)
         embed.add_field(name="User", value=f"<@{discord_id}>")
         embed.add_field(name="Group", value=type)
         embed.timestamp = datetime.datetime.now()
