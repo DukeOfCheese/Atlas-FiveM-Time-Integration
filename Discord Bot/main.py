@@ -8,7 +8,10 @@ from dotenv import load_dotenv
 import datetime
 from datetime import timedelta
 import sqlite3
+import tracemalloc
+from typing import Optional, Literal
 
+tracemalloc.start()
 load_dotenv()
 
 conn = sqlite3.connect('time.db')
@@ -17,12 +20,13 @@ c = conn.cursor()
 c.execute('''CREATE TABLE IF NOT EXISTS clockin
           (user_id INTEGER, type TEXT, start TIMESTAMP)''')
 c.execute('''CREATE TABLE IF NOT EXISTS logs
-          (user_id INTEGER, clockout TIMESTAMP, seconds INTEGER)''')
+          (user_id INTEGER, type TEXT, clockout TIMESTAMP, seconds INTEGER)''')
 conn.commit()
 
 conn.close()
 
 TOKEN = os.getenv("TOKEN")
+OWNER_DISCORD_ID = os.getenv("OWNER_DISCORD_ID")
 
 def format_discord_timestamp(datetime_str):
     try:
@@ -56,8 +60,47 @@ async def setup_hook():
     print("------")
     print(f"Logged in as {bot.user} (ID: {bot.user.id})")
     print("------")
+    cogs = ["hours"]
+    for cog in cogs:
+        try:
+            await bot.load_extension(name=f"cogs.{cog}")
+            print(f"Loaded {cog}\n------")
+        except Exception as e:
+            print(e)
+    print("Loaded cogs")
+    print("------")
 
-@app.route('/api/check', methods=['GET'])
+@bot.command()
+async def sync(ctx: commands.Context, guilds: commands.Greedy[discord.Object], spec: Optional[Literal["~", "*", "^"]] = None) -> None:
+    if ctx.author.id == int(OWNER_DISCORD_ID):
+        if not guilds:
+            if spec == "~":
+                synced = await ctx.bot.tree.sync(guild=ctx.guild)
+            if spec == "*":
+                ctx.bot.tree.copy_global_to(guild=ctx.guild)
+                synced = await ctx.bot.tree.sync(guild=ctx.guild)
+            elif spec == "^":
+                ctx.bot.tree.clear_commands(guild=ctx.guild)
+                await ctx.bot.tree.sync(guild=ctx.guild)
+                synced = []
+            else:
+                synced = await ctx.bot.tree.sync()
+            await ctx.send(f"Synced {len(synced)} commands {'globally' if spec is None else 'to the current guild.'}", ephemeral=True)
+            return
+
+        ret = 0
+        for guild in guilds:
+            try:
+                await ctx.bot.tree.sync(guild=guild)
+            except discord.HTTPException:
+                pass
+            else:
+                ret += 1
+        await ctx.send(f"Synced the tree to {ret}/{len(guilds)}", ephemeral=True)
+    else:
+        return
+
+@app.route('/', methods=['GET'])
 def api_test():
     return {"check": "pass"}
 
@@ -126,7 +169,7 @@ def time_end():
         time_taken = now - row_datetime
         seconds = time_taken.total_seconds()
         c.execute("DELETE FROM clockin WHERE user_id = ? AND type = ?", (discordId, type,))
-        c.execute("INSERT INTO logs VALUES (?, ?, ?)", (discordId, now, seconds))
+        c.execute("INSERT INTO logs VALUES (?, ?, ?, ?)", (discordId, type, now, seconds))
         conn.commit()
         conn.close()
         bot.loop.create_task(end_dm(discordId, type, formatted_start, formatted_end, seconds))
