@@ -126,7 +126,7 @@ def time_start():
             "embeds": [
             {
                 "title": "Clock-In Alert",
-                "description": "A user has clocked in/out.",
+                "description": "A user has clocked in.",
                 "color": 0x00ff00,
                 "fields": [
                     {"name": "Start", "value": format_discord_timestamp(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')), "inline": True},
@@ -196,7 +196,7 @@ def time_end():
                 "embeds": [
                 {
                     "title": "Clock-Out Alert",
-                    "description": "A user has clocked in/out.",
+                    "description": "A user has clocked out.",
                     "color": 0xFF0000,
                     "fields": [
                         {"name": "Start", "value": format_discord_timestamp(formatted_start), "inline": True},
