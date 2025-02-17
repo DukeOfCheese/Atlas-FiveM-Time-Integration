@@ -10,6 +10,7 @@ This FiveM resource is paired with an API / Discord.py Bot that runs a time logg
 - [x] Webhook Logging
 - [x] Polling user hours
 - [ ] Strengthing API security to ignore false requests
+- [ ] Dashboard written in React.js
 
 ## Suggestions? https://discord.gg/6wxdQMrruw
 
