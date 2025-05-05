@@ -1,4 +1,4 @@
-local apiUrl = "http://127.0.0.1:4000/api"
+local apiUrl = "http://127.0.0.1:5000/api"
 
 local function GetDiscordID(player)
     local discord = GetPlayerIdentifierByType(player, 'discord')
@@ -10,52 +10,57 @@ local function GetDiscordID(player)
     return nil
 end
 
-local function dbUpdate(endpoint, jsonData, callback)
+local function PrintDebug(msg)
+    if Config.Debug then
+        print("[DEBUG] " .. msg)
+    end
+end
+
+local function dataValidation(data)
+    if not data.name then
+        return false
+    elseif not data.type then
+        return false
+    else
+        return true
+    end
+end
+
+local function dbUpdate(endpoint, data, callback)
     PerformHttpRequest(apiUrl .. endpoint, function(err, text, header)
+        local data = json.decode(text)
         if err == 200 then
-            callback(true, json.decode(text))
+            callback(true)
         else
-            callback(false, nil)
-        end
-    end, 'POST', jsonData, { ["Content-Type"] = "application/json" })
-end
-
-function timeStart(player, type)
-    if not player then
-        print("ERROR: Time start export requires a player paramater")
-        return
-    end
-    if not type then
-        print("ERROR: Time start export requires a type paramater")
-        return
-    end
-    local discordId = GetDiscordID(player)
-    local jsonData = json.encode({ discordId = discordId, type = type})
-    dbUpdate('/time/start', jsonData, function(success, data)
-        if success then
-            return
-        else
-            print("Time start failed")
+            callback(false)
         end
     end)
 end
 
-function timeEnd(player, type)
-    if not player then
-        print("ERROR: Time end export requires a player paramater")
-        return
-    end
-    if not type then
-        print("ERROR: Time end export requires a type paramater")
-        return
-    end
+function timeStart(player, data)
     local discordId = GetDiscordID(player)
-    local jsonData = json.encode({ discordId = discordId, type = type})
-    dbUpdate('/time/end', jsonData, function(success, data)
-        if success then
-            return
-        else
-            print("Time end failed")
-        end
-    end)
+    if discordId then
+        dbUpdate('/time/start', data, function(result)
+            local response = result
+            if not response then
+                PrintDebug("Time start API failed for " .. player)
+            end
+        end)
+    else
+        PrintDebug("No Discord linked to " .. player)
+    end
+end
+
+function timeEnd(player, data)
+    local discordId = GetDiscordID(player)
+    if discordId then
+        dbUpdate('/time/end', data, function(result)
+            local response = result
+            if not response then
+                PrintDebug("Time end API failed for " .. player)
+            end
+        end)
+    else
+        PrintDebug("No Discord linked to " .. player)
+    end
 end
