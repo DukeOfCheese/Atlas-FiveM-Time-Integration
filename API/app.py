@@ -1,135 +1,173 @@
-import datetime
 from flask import Flask, request, jsonify, Response
-import requests
 import sqlite3
+import datetime
+from datetime import timedelta
+import requests
 
-conn = sqlite3.connect("time.db")
+database_path = 'atlastime.db'
+apiPasskey = 'changeMe' # same as in server.lua
+
+def format_discord_timestamp():
+    dt_object = datetime.datetime.now()
+    unix_timestamp = int(dt_object.timestamp())
+    return f"<t:{unix_timestamp}:R>"
+
+conn = sqlite3.connect(database_path)
 c = conn.cursor()
 
-c.execute('''CREATE TABLE IF NOT EXISTS
-          (user_id INTEGER, type TEXT)''')
+c.execute('''CREATE TABLE IF NOT EXISTS time
+          (number INTEGER, user_id INTEGER, clockin TIMESTAMP, clockout TIMESTAMP, notification INTEGER)''')
+c.execute('''CREATE TABLE IF NOT EXISTS setup
+          (number INTEGER, name TEXT, webhook TEXT, image TEXT, dms INTEGER)''')
 conn.commit()
-
-def format_discord_timestamp(datetime_str):
-    try:
-        dt_object = datetime.datetime.strptime(datetime_str, "%Y-%m-%d %H:%M:%S")
-        unix_timestamp = int(dt_object.timestamp())
-        return f"<t:{unix_timestamp}:R>"
-    except ValueError as e:
-        return f"Invalid datetime string: {e}"
+conn.close()
 
 app = Flask(__name__)
 
-@app.route('/', methods=['GET'])
-def api_test():
-    return {"check": "pass"}
+@app.route('/')
+def home():
+    return jsonify({'message': 'API is online'}), 200
 
-@app.route('/api/time/start', methods=['POST'])
+@app.route('/time/start', methods=['POST'])
 def time_start():
     data = request.get_json()
 
-    required_fields = ['discordId', 'type']
+    required_fields = ['userId', 'number']
     missing_fields = [field for field in required_fields if field not in data]
-
     if missing_fields:
-        return jsonify({"error": f"Missing fields: {', '.join(missing_fields)}"}), 400
+        return jsonify({'error': f'Missing fields: {", ".join(missing_fields)}'}), 417
     
-    discordId = data.get('discordId')
-    type = data.get('type')
-    webhook_url = data.get('webhookUrl')
+    passkey = data.get('passkey')
+    user_id = data.get('userId')
+    number = data.get('number')
+    
+    if passkey == apiPasskey:    
+        conn = sqlite3.connect(database_path)
+        c = conn.cursor()
 
-    if webhook_url:
-        data = {
-            "username": "Atlas Time Integration",
-            "embeds": [
-            {
-                "title": "Clock-In Alert",
-                "description": "A user has clocked in.",
-                "color": 0x00ff00,
-                "fields": [
-                    {"name": "Start", "value": format_discord_timestamp(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')), "inline": True},
-                    {"name": "User", "value": f"<@{discordId}>", "inline": True},
-                    {"name": "Type", "value": type, "inline": False},
-                ],
-                "footer": {"text": "Atlas Time Integration"},
-                "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
-            }
-        ]
-        }
-        requests.post(webhook_url, json=data)
-    
-    now = datetime.datetime.now()
-    
-    conn = sqlite3.connect('time.db')
-    c = conn.cursor()
-
-    c.execute("SELECT * FROM clockin WHERE user_id = ? AND type = ?", (discordId, type,))
-    row = c.fetchone()
-    if row:
-        return ({"error": "User is clocked in to this type already"}), 417
-    else:
-        c.execute("INSERT INTO clockin VALUES (?, ?, ?)", (discordId, type, now,))
+        c.execute("INSERT INTO time (number, user_id, clockin, clockout, notification) VALUES (?, ?, ?, ?, ?)", (number, user_id, datetime.datetime.now(), 0 , 0))
         conn.commit()
-        
-        conn.close()
-        return ({"success": "User is now clocked in"}), 200
 
-@app.route('/api/time/end', methods=['POST'])
+        c.execute("SELECT * FROM setup WHERE number = ?", (int(number),))
+        row = c.fetchone()
+        if row:
+            if row[2]:
+                now = datetime.datetime.utcnow().isoformat() + "Z"
+                webhook_data = {
+                    "embeds": [
+                        {
+                            "title": f"{row[1]} Clock-In",
+                            "color": 3066993,
+                            "fields": [
+                                {"name": "Start Time", "value": format_discord_timestamp(), "inline": True},
+                                {"name": "User", "value": f"<@{user_id}>"}
+                            ],
+                            "footer": {
+                                "text": "Atlas Time Integration"
+                            },
+                            "timestamp": now
+                        }
+                    ]
+                }
+                conn.close()
+                response = requests.post(row[2], json=webhook_data)
+                if response.status_code == 204:
+                    return jsonify({'message': 'success'}), 200
+                else:
+                    return jsonify({'error': response.status_code}), 400
+
+        else:
+            conn.close()
+            return jsonify({'error': 'No row'}), 400
+        
+    else:
+        conn.close()
+        return jsonify({'error': 'passkey'}), 401
+
+@app.route('/time/end', methods=['POST'])
 def time_end():
     data = request.get_json()
 
-    required_fields = ['discordId', 'type']
+    required_fields = ['userId', 'number']
     missing_fields = [field for field in required_fields if field not in data]
-
     if missing_fields:
-        return jsonify({"error": f"Missing fields: {', '.join(missing_fields)}"}), 400
+        return jsonify({'error': f'Missing fields: {", ".join(missing_fields)}'}), 417
     
-    discordId = data.get('discordId')
-    type = data.get('type')
-    webhook_url = data.get('webhookUrl')
+    passkey = data.get('passkey')
+    user_id = data.get('userId')
+    number = data.get('number')
     
-    conn = sqlite3.connect('time.db')
-    c = conn.cursor()
+    if passkey == apiPasskey:    
+        conn = sqlite3.connect(database_path)
+        c = conn.cursor()
 
-    c.execute("SELECT * FROM clockin WHERE user_id = ? AND type = ?", (discordId, type,))
-    row = c.fetchone()
-    if not row:
-        return ({"error": "User is not clocked"})
-    else:
-        now = datetime.datetime.now()
-        row_datetime = datetime.datetime.fromisoformat(row[2])
-        formatted_start = row_datetime.strftime('%Y-%m-%d %H:%M:%S')
-        formatted_end = now.strftime('%Y-%m-%d %H:%M:%S')
-        time_taken = now - row_datetime
-        seconds = time_taken.total_seconds()
-        total_time = seconds_converter(seconds)
-        c.execute("DELETE FROM clockin WHERE user_id = ? AND type = ?", (discordId, type,))
-        c.execute("INSERT INTO logs VALUES (?, ?, ?, ?)", (discordId, type, now, seconds))
+        c.execute("UPDATE time SET clockout = ? WHERE number = ? AND user_id = ? AND clockout = ?", (datetime.datetime.now(), number, user_id, 0,))
         conn.commit()
         conn.close()
 
-        if webhook_url:
-            data = {
-                "username": "Atlas Time Integration",
-                "embeds": [
-                {
-                    "title": "Clock-Out Alert",
-                    "description": "A user has clocked out.",
-                    "color": 0xFF0000,
-                    "fields": [
-                        {"name": "Start", "value": format_discord_timestamp(formatted_start), "inline": True},
-                        {"name": "End", "value": format_discord_timestamp(formatted_end), "inline": True},
-                        {"name": "User", "value": f"<@{discordId}>", "inline": True},
-                        {"name": "Type", "value": type, "inline": True},
-                        {"name": "Total Time", "value": total_time, "inline": True}
-                    ],
-                    "footer": {"text": "Atlas Time Integration"},
-                    "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
-                }
-            ]
-            }
-        requests.post(webhook_url, json=data)
-        return jsonify({"success": "DM logged"}), 200
+        return jsonify({'message': 'success'}), 200
+    else:
+        return jsonify({'error': 'Passkey'}), 401
+
+@app.route('/time/notifications', methods=['GET'])
+def time_notis():
+    conn = sqlite3.connect(database_path)
+    c = conn.cursor()
+
+    c.execute("SELECT * FROM time WHERE notification = ?", (0,))
+    notis = c.fetchall()
+    if notis:
+        c.execute("UPDATE time SET notification = ? WHERE notification = ?", (1, 0,))
+        conn.commit()
+        conn.close()
+        return jsonify({'notis': notis}), 200
+    else:
+        conn.close()
+        return jsonify({'error': 'No notifications'}), 402
     
+@app.route('/time/setup/name', methods=['POST'])
+def time_setup():
+    data = request.get_json()
+
+    passkey = data.get('passkey')
+    name = data.get('name')
+
+    if passkey == apiPasskey:
+        conn = sqlite3.connect(database_path)
+        c = conn.cursor()
+
+        c.execute("SELECT * FROM setup")
+        rows = c.fetchall()
+        if rows:
+            count = len(rows) + 1
+        else:
+            count = 1
+
+        c.execute("INSERT INTO setup (number, name) VALUES (?, ?)", (count, name,))
+        conn.commit()
+
+        return jsonify({'message': 'success'}), 200
+    else:
+        return jsonify({'error': 'passkey'}), 401
+    
+@app.route('/time/setup/webhook', methods=['POST'])
+def webhook_setup():
+    data = request.get_json()
+
+    passkey = data.get('passkey')
+    number = data.get('number')
+    webhook = data.get('webhook')
+
+    if passkey == apiPasskey:
+        conn = sqlite3.connect(database_path)
+        c = conn.cursor()
+
+        c.execute("UPDATE setup SET webhook = ? WHERE number = ?", (webhook, number,))
+        conn.commit()
+
+        return jsonify({'message': 'success'}), 200
+    else:
+        return jsonify({'error': 'passkey'}), 401   
+
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=8000, debug=True)
+    app.run(host="0.0.0.0", port=32388, debug=True)

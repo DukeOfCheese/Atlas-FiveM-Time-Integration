@@ -16,17 +16,6 @@ import requests
 tracemalloc.start()
 load_dotenv()
 
-conn = sqlite3.connect('time.db')
-c = conn.cursor()
-
-c.execute('''CREATE TABLE IF NOT EXISTS clockin
-          (user_id INTEGER, type TEXT, start TIMESTAMP)''')
-c.execute('''CREATE TABLE IF NOT EXISTS logs
-          (user_id INTEGER, type TEXT, clockout TIMESTAMP, seconds INTEGER)''')
-conn.commit()
-
-conn.close()
-
 TOKEN = os.getenv("TOKEN")
 OWNER_DISCORD_ID = os.getenv("OWNER_DISCORD_ID")
 
@@ -61,7 +50,7 @@ async def setup_hook():
     print("------")
     print(f"Logged in as {bot.user} (ID: {bot.user.id})")
     print("------")
-    cogs = ["hours"]
+    cogs = ["noti", "hours"]
     for cog in cogs:
         try:
             await bot.load_extension(name=f"cogs.{cog}")
@@ -100,21 +89,5 @@ async def sync(ctx: commands.Context, guilds: commands.Greedy[discord.Object], s
         await ctx.send(f"Synced the tree to {ret}/{len(guilds)}", ephemeral=True)
     else:
         return
-
-async def end_dm(discord_id, type, start, end, time):
-    await bot.wait_until_ready()
-    try:
-        user = await bot.fetch_user(int(discord_id))
-        embed = discord.Embed(title="Clocked Out", color=discord.Color.red())
-        embed.add_field(name="Start", value=format_discord_timestamp(start))
-        embed.add_field(name="End", value=format_discord_timestamp(end))
-        embed.add_field(name="Total Time", value=time)
-        embed.add_field(name="User", value=f"<@{discord_id}>")
-        embed.add_field(name="Group", value=type)
-        embed.timestamp = datetime.datetime.now()
-        embed.set_footer(text="Atlas Time Integration")
-        await user.send(embed=embed)
-    except Exception as e:
-        print(f"Error sending DM: {e}")
 
 bot.run(TOKEN)

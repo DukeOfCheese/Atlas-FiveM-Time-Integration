@@ -1,10 +1,20 @@
-local apiUrl = "http://127.0.0.1:5000/api"
+local apiUrl = 'http://127.0.0.1:5000/api'
+local apiPasskey = 'changeMe'
+local headers = {
+    ['Content-Type'] = 'application/json',
+}
 
 local function GetDiscordID(player)
-    local discord = GetPlayerIdentifierByType(player, 'discord')
-    if discord then
-        local id = discord:gsub('discord:', '')
-        return id
+    local discordId = Player(player).state.discordId
+    if discordId ~= 0 then
+        return discordId
+    else
+        local discord = GetPlayerIdentifierByType(player, 'discord')
+        if discord then
+            local id = discord:gsub('discord:', '')
+            Player(player).state.discordId = id
+            return id
+        end
     end
 
     return nil
@@ -26,41 +36,48 @@ local function dataValidation(data)
     end
 end
 
-local function dbUpdate(endpoint, data, callback)
-    PerformHttpRequest(apiUrl .. endpoint, function(err, text, header)
-        local data = json.decode(text)
-        if err == 200 then
-            callback(true)
-        else
-            callback(false)
-        end
-    end)
+local function dbRequest(endpoint, method, data)
+    local statusCode, responseBody, responseHeaders, errorData = PerformHttpRequestAwait(apiUrl .. endpoint, method, data, headers)
+    local data = json.decode(text)
+    if err == 200 then
+        return true
+    else
+        return false
+    end
 end
 
 function timeStart(player, data)
     local discordId = GetDiscordID(player)
     if discordId then
-        dbUpdate('/time/start', data, function(result)
-            local response = result
+        if dataValidation(data) then
+            local response = dbRequest('/time/start', 'POST', data)
             if not response then
-                PrintDebug("Time start API failed for " .. player)
+                PrintDebug('timeStart API failed for ' .. player)
+            else
+                PrintDebug('timeStart API success for ' .. player)
             end
-        end)
+        else
+            PrintDebug('Data passed was malformed for timeStart')
+        end
     else
-        PrintDebug("No Discord linked to " .. player)
+        PrintDebug('No Discord linked to ' .. player .. ' for timeStart')
     end
 end
 
 function timeEnd(player, data)
     local discordId = GetDiscordID(player)
     if discordId then
-        dbUpdate('/time/end', data, function(result)
-            local response = result
+        if dataValidation(data) then
+            local response = dbRequest('/time/end', 'POST', data)
             if not response then
-                PrintDebug("Time end API failed for " .. player)
+                PrintDebug('timeEnd API failed for ' .. player)
+            else
+                PrintDebug('timeEnd API success for ' .. player)
             end
-        end)
+        else
+            PrintDebug('Data passed was malformed for timeEnd')
+        end
     else
-        PrintDebug("No Discord linked to " .. player)
+        PrintDebug('No Discord linked to ' .. player .. ' for timeEnd')
     end
 end
