@@ -7,8 +7,8 @@ import requests
 database_path = 'atlastime.db'
 apiPasskey = 'changeMe' # same as in server.lua
 
-def format_discord_timestamp():
-    dt_object = datetime.datetime.now()
+def format_discord_timestamp(timestamp):
+    dt_object = datetime.datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S.%f")
     unix_timestamp = int(dt_object.timestamp())
     return f"<t:{unix_timestamp}:R>"
 
@@ -48,6 +48,9 @@ def time_start():
         c.execute("INSERT INTO time (number, user_id, clockin, clockout, notification) VALUES (?, ?, ?, ?, ?)", (number, user_id, datetime.datetime.now(), 0 , 0))
         conn.commit()
 
+        c.execute("SELECT clockin FROM time WHERE number = ? AND user_id = ? ORDER BY clockin DESC LIMIT 1", (number, user_id,))
+        result = c.fetchone()
+
         c.execute("SELECT * FROM setup WHERE number = ?", (int(number),))
         row = c.fetchone()
         if row:
@@ -59,7 +62,7 @@ def time_start():
                             "title": f"{row[1]} Clock-In",
                             "color": 3066993,
                             "fields": [
-                                {"name": "Start Time", "value": format_discord_timestamp(), "inline": True},
+                                {"name": "Start Time", "value": format_discord_timestamp(result[0]), "inline": True},
                                 {"name": "User", "value": f"<@{user_id}>"}
                             ],
                             "footer": {
@@ -78,7 +81,7 @@ def time_start():
 
         else:
             conn.close()
-            return jsonify({'error': 'No row'}), 400
+            return jsonify({'message': 'success'}), 200
         
     else:
         conn.close()
@@ -103,27 +106,68 @@ def time_end():
 
         c.execute("UPDATE time SET clockout = ? WHERE number = ? AND user_id = ? AND clockout = ?", (datetime.datetime.now(), number, user_id, 0,))
         conn.commit()
-        conn.close()
 
-        return jsonify({'message': 'success'}), 200
+        c.execute("SELECT clockin, clockout FROM time WHERE number = ? AND user_id = ? ORDER BY clockin DESC LIMIT 1", (number, user_id))
+        result = c.fetchone()
+
+        c.execute("SELECT * FROM setup WHERE number = ?", (int(number),))
+        row = c.fetchone()
+        if row:
+            if row[2]:
+                now = datetime.datetime.utcnow().isoformat() + "Z"
+                webhook_data = {
+                    "embeds": [
+                        {
+                            "title": f"{row[1]} Clock-Out",
+                            "color": 16711680,
+                            "fields": [
+                                {"name": "Start Time", "value": format_discord_timestamp(result[0]), "inline": True},
+                                {"name": "End Time", "value": format_discord_timestamp(result[1]), "inline": True},
+                                {"name": "User", "value": f"<@{user_id}>"}
+                            ],
+                            "footer": {
+                                "text": "Atlas Time Integration"
+                            },
+                            "timestamp": now
+                        }
+                    ]
+                }
+                conn.close()
+                response = requests.post(row[2], json=webhook_data)
+                if response.status_code == 204:
+                    return jsonify({'message': 'success'}), 200
+                else:
+                    return jsonify({'error': response.status_code}), 400
+
+        else:
+            conn.close()
+            return jsonify({'message': 'success'}), 200
     else:
-        return jsonify({'error': 'Passkey'}), 401
+        return jsonify({'error': 'passkey'}), 401
 
-@app.route('/time/notifications', methods=['GET'])
+@app.route('/time/notifications', methods=['POST'])
 def time_notis():
-    conn = sqlite3.connect(database_path)
-    c = conn.cursor()
+    data = request.get_json()
 
-    c.execute("SELECT * FROM time WHERE notification = ?", (0,))
-    notis = c.fetchall()
-    if notis:
-        c.execute("UPDATE time SET notification = ? WHERE notification = ?", (1, 0,))
-        conn.commit()
-        conn.close()
-        return jsonify({'notis': notis}), 200
+    passkey = data.get('passkey')
+
+    if passkey == apiPasskey:
+        conn = sqlite3.connect(database_path)
+        c = conn.cursor()
+
+        c.execute("SELECT * FROM time WHERE notification = ? AND clockout != ?", (0, 0,))
+        notis = c.fetchall()
+        if notis:
+            for noti in notis:
+                c.execute("UPDATE time SET notification = ? WHERE notification = ? AND clockin = ?", (1, 0, noti[2],))
+            conn.commit()
+            conn.close()
+            return jsonify({'notis': notis}), 200
+        else:
+            conn.close()
+            return jsonify({'notis': None}), 200
     else:
-        conn.close()
-        return jsonify({'error': 'No notifications'}), 402
+        return jsonify({'error': 'passkey'}), 401
     
 @app.route('/time/setup/name', methods=['POST'])
 def time_setup():

@@ -45,6 +45,11 @@ def seconds_converter(seconds):
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix=".", intents=intents)
 
+class MyBot(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self.tree = Tree() #type: ignore
+
 @bot.event
 async def setup_hook():
     print("------")
