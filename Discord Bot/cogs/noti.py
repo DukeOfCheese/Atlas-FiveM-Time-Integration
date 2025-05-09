@@ -14,7 +14,7 @@ import os
 load_dotenv()
 
 api_url = os.getenv("API_URL")
-apiPasskey = 'changeMe'
+apiPasskey = os.getenv("API_PASSKEY")
 
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix=".", intents=intents)
