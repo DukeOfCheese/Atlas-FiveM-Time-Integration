@@ -347,6 +347,25 @@ def stats_group():
     else:
         return jsonify({'error': 'passkey'}), 401
     
+@app.route('/stats/names', methods=['POST'])
+def stats_names():
+    data = request.get_json()
+
+    passkey = data.get('passkey')
+
+    if passkey == apiPasskey:
+        conn = sqlite3.connect(database_path)
+        c = conn.cursor()
+
+        c.execute("SELECT name, number FROM setup")
+        rows = c.fetchall()
+        
+        conn.close()
+
+        return jsonify({'rows': rows}), 200
+    else:
+        return jsonify({'error': 'passkey'}), 401
+    
 @app.route('/time/manual', methods=['POST'])
 def time_manual():
     data = request.get_json()
@@ -366,7 +385,7 @@ def time_manual():
         conn.close()
         return jsonify({'message': 'success'}), 200
     else:
-         return jsonify({'error': 'passkey'}), 401
+        return jsonify({'error': 'passkey'}), 401
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=32388, debug=True)

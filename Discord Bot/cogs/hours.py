@@ -67,6 +67,16 @@ async def addHours(user_id, number, seconds):
                 return True
             else:
                 return False
+            
+async def returnNameChoices(current):
+    payload = {
+        "passkey": apiPasskey,
+    }
+    async with aiohttp.ClientSession() as session:
+        async with session.post(f"{api_url}/stats/names", json=payload) as response:
+            data = await response.json()
+            choices = [discord.app_commands.Choice(name=row[1], value=row[0]) for row in data['rows'] if row[0].startswith(current.lower())][:25]
+            return choices
 
 class HoursCog(commands.Cog):
     def __init__(self, bot):
@@ -96,6 +106,10 @@ class HoursCog(commands.Cog):
         embed.set_footer(text=f"Requested by {interaction.user.name}")
         await interaction.followup.send(embed=embed)
 
+    @hoursuser.autocomplete("group")
+    async def manualtime_group_auto(self, interaction: discord.Interaction, current: str, /):
+        return await returnNameChoices(current)
+
     @hours_group.command(name="group", description="Provides hour information about a particular group")
     @discord.app_commands.describe(time_frame = "Time frame to get hour information about", group = "Get hour information on a particular group", hidden = "[OPTIONAL] Whether to make the response hidden or not")
     async def hoursgroup(self, interaction: discord.Interaction, time_frame: Literal["This Week", "Last Week", "This Month", "Last Month", "All Time"], group: str, hidden: bool = False):
@@ -116,6 +130,10 @@ class HoursCog(commands.Cog):
         embed.set_footer(text=f"Requested by {interaction.user.name}")
         await interaction.followup.send(embed=embed)
 
+    @hoursgroup.autocomplete("group")
+    async def manualtime_group_auto(self, interaction: discord.Interaction, current: str, /):
+        return await returnNameChoices(current)
+
     @discord.app_commands.command(name="manualtime", description="Adds manual time for a user to a group")
     @discord.app_commands.describe(user = "User to add manual hours to", group = "Group to add such hours to", time = "Time to add to the user", time_type = "Type of time to add to the user")
     async def manualtime(self, interaction: discord.Interaction, user: discord.User, group: str, time: int, time_type: Literal["Second(s)", "Minute(s)", "Hour(s)"]):
@@ -134,6 +152,10 @@ class HoursCog(commands.Cog):
         embed.timestamp = datetime.datetime.now()
         embed.set_footer(text=f"Requested by {interaction.user.name}")
         await interaction.followup.send(embed=embed)
+
+    @manualtime.autocomplete("group")
+    async def manualtime_group_auto(self, interaction: discord.Interaction, current: str, /):
+        return await returnNameChoices(current)
 
 async def setup(bot):
     await bot.add_cog(HoursCog(bot))
