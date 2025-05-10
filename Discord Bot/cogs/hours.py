@@ -53,6 +53,20 @@ async def checkGroupHours(time_frame, group):
                 return data
             else:
                 return None
+            
+async def addHours(user_id, number, seconds):
+    payload = {
+        "passkey": apiPasskey,
+        "userId": user_id,
+        "number": number,
+        "seconds": seconds,
+    }
+    async with aiohttp.ClientSession() as session:
+        async with session.post(f"{api_url}/time/manual", json=payload) as response:
+            if response.status_code == 200:
+                return True
+            else:
+                return False
 
 class HoursCog(commands.Cog):
     def __init__(self, bot):
@@ -83,6 +97,7 @@ class HoursCog(commands.Cog):
         await interaction.followup.send(embed=embed)
 
     @hours_group.command(name="group", description="Provides hour information about a particular group")
+    @discord.app_commands.describe(time_frame = "Time frame to get hour information about", group = "Get hour information on a particular group", hidden = "[OPTIONAL] Whether to make the response hidden or not")
     async def hoursgroup(self, interaction: discord.Interaction, time_frame: Literal["This Week", "Last Week", "This Month", "Last Month", "All Time"], group: str, hidden: bool = False):
         await interaction.response.defer(ephemeral=hidden)
         data = await checkGroupHours(time_frame, group)
@@ -97,6 +112,25 @@ class HoursCog(commands.Cog):
             embed.add_field(name="Hour", value=hour_list)
         else:
             embed = discord.Embed(title="Group Hour Information", description=f"**{await getGroupName(group)}** has no clocked hours in this time period!", color=discord.Color.red())
+        embed.timestamp = datetime.datetime.now()
+        embed.set_footer(text=f"Requested by {interaction.user.name}")
+        await interaction.followup.send(embed=embed)
+
+    @discord.app_commands.command(name="manualtime", description="Adds manual time for a user to a group")
+    @discord.app_commands.describe(user = "User to add manual hours to", group = "Group to add such hours to", time = "Time to add to the user", time_type = "Type of time to add to the user")
+    async def manualtime(self, interaction: discord.Interaction, user: discord.User, group: str, time: int, time_type: Literal["Second(s)", "Minute(s)", "Hour(s)"]):
+        await interaction.response.defer()
+        if time_type == "Second(s)":
+            seconds = time
+        elif time_type == "Minute(s)":
+            seconds = time * 60
+        elif time_type == "Hour(s)":
+            seconds = time * 3600
+        response = await addHours(user.id, group, seconds)
+        if response:
+            embed = discord.Embed(title="Manual Time", description=f"Successfully added **{time} {time_type}** to {user.mention}", color=discord.Color.green())
+        else:
+            embed = discord.Embed(title="Manual Time Error", description=f"Failed to add hours to {user.mention}", color=discord.Color.red())
         embed.timestamp = datetime.datetime.now()
         embed.set_footer(text=f"Requested by {interaction.user.name}")
         await interaction.followup.send(embed=embed)
