@@ -239,7 +239,7 @@ def webhook_setup():
     else:
         return jsonify({'error': 'passkey'}), 401
     
-@app.route('/stats/name')
+@app.route('/stats/name', methods=['POST'])
 def stats_name():
     data = request.get_json()
 
@@ -247,13 +247,16 @@ def stats_name():
     number = data.get('number')
 
     if passkey == apiPasskey:
+        conn = sqlite3.connect(database_path)
+        c = conn.cursor()
         c.execute("SELECT name FROM setup WHERE number = ?", (number,))
         row = c.fetchone()
+        conn.close()
         return jsonify({'name': row[0]}), 200
     else:
         return jsonify({'error': 'passkey'}), 401
     
-@app.route('/stats/user')
+@app.route('/stats/user', methods=['POST'])
 def stats_user():
     data = request.get_json()
 
@@ -263,6 +266,8 @@ def stats_user():
     number = data.get('number')
 
     if passkey == apiPasskey:
+        conn = sqlite3.connect(database_path)
+        c = conn.cursor()
         if time_frame != "All Time":
             today = datetime.datetime.today()
             days_to_subtract = today.weekday() + 1
@@ -292,6 +297,52 @@ def stats_user():
             else:
                 c.execute("SELECT number, SUM(seconds) as total_seconds FROM time WHERE user_id = ? ORDER BY total_seconds DESC", (user_id,))
         rows = c.fetchall()
+        conn.close()
+        return jsonify({'rows': rows}), 200
+    else:
+        return jsonify({'error': 'passkey'}), 401
+    
+@app.route('/stats/group', methods=['POST'])
+def stats_group():
+    data = request.get_json()
+
+    passkey = data.get('passkey')
+    time_frame = data.get('timeFrame')
+    number = data.get('number')
+
+    if passkey == apiPasskey:
+        conn = sqlite3.connect(database_path)
+        c = conn.cursor()
+        if time_frame != "All Time":
+            today = datetime.datetime.today()
+            days_to_subtract = today.weekday() + 1
+            last_sunday = today - timedelta(days=days_to_subtract)
+            current_sunday = last_sunday
+            if time_frame == "This Month":
+                start = today.replace(day=1, hour=0, minute=0, second=0).strftime('%Y-%m-%d %H:%M:%S')
+                end = today.strftime('%Y-%m-%d %H:%M:%S')
+            elif time_frame == "Last Month":
+                first_day_last_month = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
+                last_day_last_month = first_day_last_month.replace(day=monthrange(first_day_last_month.year, first_day_last_month.month)[1])
+                start = first_day_last_month.strftime('%Y-%m-%d %H:%M:%S')
+                end = last_day_last_month.strftime('%Y-%m-%d %H:%M:%S')
+            elif time_frame == "This Week":
+                start = current_sunday.strftime('%Y-%m-%d %H:%M:%S')
+                end = today.strftime('%Y-%m-%d %H:%M:%S')
+            elif time_frame == "Last Week":
+                start = (current_sunday - timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
+                end = (current_sunday - timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S')
+            if number:
+                c.execute("SELECT user_id, SUM(seconds) as total_seconds FROM time WHERE clockout BETWEEN ? AND ? AND number = ? GROUP BY user_id ORDER BY total_seconds DESC", (start, end, number,))
+            else:
+                c.execute("SELECT user_id, SUM(seconds) as total_seconds FROM time WHERE clockout BETWEEN ? AND ? GROUP BY user_id ORDER BY total_seconds DESC", (start, end,))
+        else:
+            if number:
+                c.execute("SELECT user_id, SUM(seconds) as total_seconds FROM time WHERE number = ? GROUP BY user_id ORDER BY total_seconds DESC", (number,))
+            else:
+                c.execute("SELECT user_id, SUM(seconds) as total_seconds FROM time GROUP BY user_id ORDER BY total_seconds DESC")
+        rows = c.fetchall()
+        conn.close()
         return jsonify({'rows': rows}), 200
     else:
         return jsonify({'error': 'passkey'}), 401
