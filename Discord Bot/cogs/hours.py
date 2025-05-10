@@ -75,7 +75,7 @@ async def returnNameChoices(current):
     async with aiohttp.ClientSession() as session:
         async with session.post(f"{api_url}/stats/names", json=payload) as response:
             data = await response.json()
-            choices = [discord.app_commands.Choice(name=row[1], value=row[0]) for row in data['rows'] if row[0].startswith(current.lower())][:25]
+            choices = [discord.app_commands.Choice(name=str(row[0]), value=str(row[1])) for row in data['rows'] if row[0].startswith(current.lower())][:25]
             return choices
 
 class HoursCog(commands.Cog):
