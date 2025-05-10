@@ -146,12 +146,19 @@ class HoursCog(commands.Cog):
             seconds = time * 3600
         response = await addHours(user.id, group, seconds)
         if response:
-            embed = discord.Embed(title="Manual Time", description=f"Successfully added **{time} {time_type}** to {user.mention}", color=discord.Color.green())
+            embed = discord.Embed(title="Manual Time", description=f"Successfully added **{time} {time_type}** to {user.mention} for **{await getGroupName(group)}**", color=discord.Color.green())
         else:
             embed = discord.Embed(title="Manual Time Error", description=f"Failed to add hours to {user.mention}", color=discord.Color.red())
         embed.timestamp = datetime.datetime.now()
         embed.set_footer(text=f"Requested by {interaction.user.name}")
         await interaction.followup.send(embed=embed)
+        user_embed = discord.Embed(title="Manual Time", description=f"{interaction.user.mention} has added **{time} {time_type}** to your hours in **{await getGroupName(group)}**", color=discord.Color.green())
+        user_embed.timestamp = datetime.datetime.now()
+        user_embed.set_footer(text="Atlas FiveM Time Integration")
+        try:
+            await user.send(embed=user_embed)
+        except:
+            pass
 
     @manualtime.autocomplete("group")
     async def manualtime_group_auto(self, interaction: discord.Interaction, current: str, /):
