@@ -8,9 +8,8 @@ This FiveM resource is paired with an API / Discord.py Bot that runs a time logg
 - [ ] Strengthing API security to ignore false requests
 - [ ] Dashboard written in React.js
 
-[!NOTE] 
-
-- To use the Discord bot, you must create and propogate a .env file
+> [!NOTE]
+> To use the Discord bot, you must create and propogate a .env file
 
 ## Suggestions? https://discord.gg/6wxdQMrruw
 
