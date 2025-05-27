@@ -2,7 +2,6 @@ import discord
 from discord.ext import commands
 import os
 import datetime
-from datetime import timedelta
 from typing import Literal
 import aiohttp
 
@@ -107,7 +106,7 @@ class HoursCog(commands.Cog):
         await interaction.followup.send(embed=embed)
 
     @hoursuser.autocomplete("group")
-    async def manualtime_group_auto(self, interaction: discord.Interaction, current: str, /):
+    async def hoursuser_group_auto(self, interaction: discord.Interaction, current: str, /):
         return await returnNameChoices(current)
 
     @hours_group.command(name="group", description="Provides hour information about a particular group")
@@ -131,7 +130,7 @@ class HoursCog(commands.Cog):
         await interaction.followup.send(embed=embed)
 
     @hoursgroup.autocomplete("group")
-    async def manualtime_group_auto(self, interaction: discord.Interaction, current: str, /):
+    async def hoursgroup_group_auto(self, interaction: discord.Interaction, current: str, /):
         return await returnNameChoices(current)
 
     @discord.app_commands.command(name="manualtime", description="Adds manual time for a user to a group")
@@ -157,7 +156,7 @@ class HoursCog(commands.Cog):
         user_embed.set_footer(text="Atlas FiveM Time Integration")
         try:
             await user.send(embed=user_embed)
-        except:
+        except Exception:
             pass
 
     @manualtime.autocomplete("group")

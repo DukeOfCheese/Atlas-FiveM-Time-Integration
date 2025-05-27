@@ -1,15 +1,9 @@
 import discord
 from discord.ext import commands, tasks
-import asyncio
 import os
 import datetime
-from datetime import timedelta
-import sqlite3
-from typing import Literal
-from calendar import monthrange
 import aiohttp
 from dotenv import load_dotenv
-import os
 
 load_dotenv()
 
@@ -34,7 +28,7 @@ async def notiApi():
     async with aiohttp.ClientSession() as session:
         async with session.post(f"{api_url}/time/notifications", json=payload) as response:
             data = await response.json()
-            if data and data['notis'] != None:
+            if data and data['notis'] is None:
                 return data['notis']
             else:
                 return None

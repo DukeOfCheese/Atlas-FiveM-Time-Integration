@@ -1,17 +1,10 @@
 import discord
-from discord import Webhook
 from discord.ext import commands
-import asyncio
-from flask import Flask, request, jsonify
-import threading
 import os
 from dotenv import load_dotenv
 import datetime
-from datetime import timedelta
-import sqlite3
 import tracemalloc
 from typing import Optional, Literal
-import requests
 
 tracemalloc.start()
 load_dotenv()
@@ -48,7 +41,7 @@ bot = commands.Bot(command_prefix=".", intents=intents)
 class MyBot(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.tree = Tree() #type: ignore
+        self.tree = Tree() #type: ignore  # noqa: F821
 
 @bot.event
 async def setup_hook():

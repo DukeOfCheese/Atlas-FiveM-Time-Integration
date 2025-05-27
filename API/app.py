@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, Response
+from flask import Flask, request, jsonify
 import sqlite3
 import datetime
 from datetime import timedelta
